@@ -26,6 +26,17 @@ nav { background: #16213e; display: flex; flex-shrink: 0; }
 .tab:hover { color: #ccc; }
 .tab.active { color: #fff; border-bottom-color: #0066cc; }
 
+.timeline { background: #0d1117; padding: 6px 16px; display: flex;
+            align-items: center; gap: 8px; overflow-x: auto; flex-shrink: 0;
+            border-bottom: 1px solid #222; }
+.timeline-label { font-size: 0.7rem; color: #555; text-transform: uppercase;
+                  letter-spacing: 0.06em; white-space: nowrap; margin-right: 4px; }
+.date-pill { background: none; border: 1px solid #333; color: #666;
+             padding: 3px 10px; border-radius: 10px; font-size: 0.78rem;
+             cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.date-pill:hover { border-color: #666; color: #bbb; }
+.date-pill.active { background: #0066cc; border-color: #0066cc; color: #fff; }
+
 .layout { display: flex; flex: 1; overflow: hidden; }
 .svg-wrap { flex: 1; overflow: auto; padding: 16px; background: #e8eaed; }
 .elev-panel { display: none; }
@@ -79,6 +90,8 @@ nav { background: #16213e; display: flex; flex-shrink: 0; }
   <button class="tab"        onclick="switchTab(2)">South</button>
   <button class="tab"        onclick="switchTab(3)">West</button>
 </nav>
+
+<div class="timeline" id="timeline"></div>
 
 <div class="layout">
   <div class="svg-wrap">
@@ -219,14 +232,47 @@ function applyColors() {
     updateStats();
 }
 
-// ── Auto-load data.csv when served from a web server ──
-fetch('data.csv')
-    .then(r => { if (!r.ok) throw new Error(); return r.text(); })
-    .then(text => {
-        parseCSV(text);
-        document.getElementById('dataStatus').textContent = 'Data loaded';
-    })
-    .catch(() => { /* not served from web server — user loads manually */ });
+// ── Timeline ───────────────────────────────────────────
+const DATA_DATES = ["2026-03-20", "2026-03-24", "2026-03-26"];
+
+function formatDate(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+function buildTimeline() {
+    const tl = document.getElementById('timeline');
+    if (!DATA_DATES.length) return;
+    const lbl = document.createElement('span');
+    lbl.className = 'timeline-label';
+    lbl.textContent = 'Export date:';
+    tl.appendChild(lbl);
+    DATA_DATES.forEach(date => {
+        const btn = document.createElement('button');
+        btn.className = 'date-pill';
+        btn.textContent = formatDate(date);
+        btn.dataset.date = date;
+        btn.onclick = () => loadDate(date);
+        tl.appendChild(btn);
+    });
+}
+
+function loadDate(date) {
+    document.querySelectorAll('.date-pill').forEach(b =>
+        b.classList.toggle('active', b.dataset.date === date));
+    fetch(`data/${date}-data.csv`)
+        .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+        .then(text => {
+            parseCSV(text);
+            document.getElementById('dataStatus').textContent = formatDate(date);
+        })
+        .catch(() => {
+            document.getElementById('dataStatus').textContent = 'Load failed';
+        });
+}
+
+buildTimeline();
+if (DATA_DATES.length) loadDate(DATA_DATES[DATA_DATES.length - 1]);
 
 // ── CSV loading ────────────────────────────────────────
 function parseCSV(text) {
