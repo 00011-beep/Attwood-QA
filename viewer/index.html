@@ -165,7 +165,6 @@ async function loadSVGs() {
     }));
     applyColors();
 }
-loadSVGs();
 
 // ── Zone discovery ─────────────────────────────────────
 function getZones(svgEl) {
@@ -272,7 +271,9 @@ function loadDate(date) {
 }
 
 buildTimeline();
-if (DATA_DATES.length) loadDate(DATA_DATES[DATA_DATES.length - 1]);
+loadSVGs().then(() => {
+    if (DATA_DATES.length) loadDate(DATA_DATES[DATA_DATES.length - 1]);
+});
 
 // ── CSV loading ────────────────────────────────────────
 function parseCSV(text) {
