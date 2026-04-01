@@ -17,6 +17,9 @@ header h1 { font-size: 1rem; font-weight: 600; letter-spacing: 0.02em; }
 .load-btn { background: #0066cc; color: #fff; border: none; border-radius: 4px;
             padding: 6px 14px; font-size: 0.85rem; cursor: pointer; }
 .load-btn:hover { background: #0052a3; }
+.dl-btn { background: #2d8a4e; color: #fff; border: none; border-radius: 4px;
+          padding: 6px 14px; font-size: 0.85rem; cursor: pointer; }
+.dl-btn:hover { background: #236b3c; }
 #dataStatus { font-size: 0.8rem; color: #aaa; }
 
 nav { background: #16213e; display: flex; flex-shrink: 0; }
@@ -78,6 +81,7 @@ nav { background: #16213e; display: flex; flex-shrink: 0; }
 <header>
   <h1>Atwood House &mdash; Scaffold Dismantle QA Progress</h1>
   <div class="load-wrap">
+    <button class="dl-btn" onclick="downloadImage()">&#11015; Download</button>
     <button class="load-btn" onclick="document.getElementById('csvFile').click()">Load QA Data</button>
     <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="loadCSV(this)">
     <span id="dataStatus">No data loaded</span>
@@ -364,6 +368,139 @@ function moveTip(e) {
     tipEl.style.top  = (e.clientY + 14) + 'px';
 }
 function hideTip() { tipEl.style.display = 'none'; }
+
+// ── Download current view as PNG ──────────────────────
+function downloadImage() {
+    const tabNames = ['North','East','South','West'];
+    const activeIdx = [...document.querySelectorAll('.tab')].findIndex(t => t.classList.contains('active'));
+    const panel = document.getElementById('panel-' + activeIdx);
+    const svgEl = panel.querySelector('svg');
+    if (!svgEl) return;
+
+    // Find active date
+    const activePill = document.querySelector('.date-pill.active');
+    const dateLabel = activePill ? activePill.textContent : '';
+
+    // Legend data
+    const legendItems = [...STAGES, {stage: null, name: 'No data', color: NO_COLOR}];
+
+    // Dimensions
+    const LEGEND_W = 560;
+    const HEADER_H = 90;
+    const FOOTER_H = 50;
+    const PADDING = 40;
+    const vb = svgEl.viewBox.baseVal;
+    const svgW = vb.width || svgEl.clientWidth || 1200;
+    const svgH = vb.height || svgEl.clientHeight || 800;
+    const scale = Math.min(3200 / svgW, 1);
+    const drawW = Math.round(svgW * scale);
+    const drawH = Math.round(svgH * scale);
+    const canvasW = drawW + LEGEND_W + PADDING * 3;
+    const canvasH = Math.max(drawH + HEADER_H + FOOTER_H + PADDING * 2, legendItems.length * 50 + HEADER_H + 160);
+
+    // Serialize SVG with inline namespace
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+    clone.setAttribute('width', drawW);
+    clone.setAttribute('height', drawH);
+    const svgData = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+
+    const img = new Image();
+    img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext('2d');
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+
+        // Header
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, canvasW, HEADER_H);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 34px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillText('Atwood House \u2014 ' + tabNames[activeIdx] + ' Elevation', PADDING, 58);
+        if (dateLabel) {
+            ctx.font = '26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            ctx.fillStyle = '#aaaaaa';
+            ctx.fillText(dateLabel, canvasW - LEGEND_W - PADDING, 58);
+        }
+
+        // SVG
+        ctx.drawImage(img, PADDING, HEADER_H + PADDING, drawW, drawH);
+        URL.revokeObjectURL(url);
+
+        // Legend
+        const lx = drawW + PADDING * 2;
+        let ly = HEADER_H + PADDING;
+        ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillStyle = '#999999';
+        ctx.fillText('STAGES', lx, ly + 18);
+        ly += 40;
+
+        ctx.font = '24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        legendItems.forEach(s => {
+            // Swatch
+            ctx.fillStyle = s.color;
+            ctx.fillRect(lx, ly, 28, 28);
+            ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+            ctx.strokeRect(lx, ly, 28, 28);
+            // Label
+            ctx.fillStyle = '#333333';
+            ctx.fillText(s.name, lx + 40, ly + 22);
+            // Count
+            const cntEl = document.getElementById('cnt-' + (s.stage ?? 'nodata'));
+            if (cntEl) {
+                ctx.fillStyle = '#999999';
+                ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                ctx.fillText(cntEl.textContent, lx + LEGEND_W - 80, ly + 22);
+                ctx.font = '24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            }
+            ly += 46;
+        });
+
+        // Progress bar
+        ly += 20;
+        ctx.font = 'bold 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillStyle = '#999999';
+        ctx.fillText('OVERALL PROGRESS', lx, ly + 18);
+        ly += 36;
+        const barW = LEGEND_W - 60;
+        ctx.fillStyle = '#eeeeee';
+        ctx.fillRect(lx, ly, barW, 18);
+        const pctText = document.getElementById('progressLabel').textContent;
+        const pctMatch = pctText.match(/(\d+)%/);
+        const pct = pctMatch ? parseInt(pctMatch[1]) : 0;
+        const grad = ctx.createLinearGradient(lx, 0, lx + barW, 0);
+        grad.addColorStop(0, '#FF8000');
+        grad.addColorStop(1, '#00AA44');
+        ctx.fillStyle = grad;
+        ctx.fillRect(lx, ly, barW * pct / 100, 18);
+        ly += 34;
+        ctx.fillStyle = '#666666';
+        ctx.font = '22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillText(pctText, lx, ly + 16);
+
+        // Footer
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(0, canvasH - FOOTER_H, canvasW, FOOTER_H);
+        ctx.fillStyle = '#bbbbbb';
+        ctx.font = '18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillText('Generated from Atwood House QA Progress Viewer', PADDING, canvasH - 16);
+
+        // Download
+        const a = document.createElement('a');
+        a.download = 'Atwood-' + tabNames[activeIdx] + (dateLabel ? '-' + dateLabel.replace(/\//g,'-') : '') + '.png';
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+    };
+    img.src = url;
+}
 </script>
 </body>
 </html>
